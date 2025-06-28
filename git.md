@@ -56,17 +56,18 @@ git config --global user.email "you@example.com"
 Clone a repo:
 
 ```bash
-git clone git@github.com:username/repo.git
+git clone git@172.16.2.231:root/padm.git
 ```
 
-![Git Clone](https://miro.medium.com/v2/resize:fit:1200/1*-DSlJmejJfK0cFo1e6E5Vw.png)
+![Git Clone](https://i.postimg.cc/59FhXq6D/gitclone.png)
 
-Other commands:
-- `git status`
-- `git add .`
-- `git commit -m "msg"`
-- `git push`
-- `git pull`
+
+🔗<a href="import-cloned-maven-project.md" target="_blank">Import Cloned Maven Project in Eclipse</a> 
+
+🔗<a href="git-workflow-eclipse.md" target="_blank">🧭 Git Workflow in Eclipse (GUI-Based)</a> 
+
+
+![gitflowgif](https://i.postimg.cc/xjx8bt5F/1720581317500-ezgif-com-overlay-1.gif)
 
 ---
 

@@ -1,0 +1,471 @@
+variables:
+  PROFILE: "default"
+  MAVEN_HOME: "/home/a/Padm/JavaEnv/apache-maven-3.3.9/bin"
+  ARTIFACT_DIR: "acme-document/wars"
+
+workflow:
+  rules:
+    - if: '$ACTION == "Build and Deploy"'
+      variables:
+        WORKFLOW_TYPE: "build_and_deploy"
+    - if: '$ACTION == "Deploy Existing"'
+      variables:
+        WORKFLOW_TYPE: "deploy_only"
+    - when: always 
+        
+    
+stages:
+  - build_snapshot
+  - deploy_snapshot
+  - build_release
+  - build_tag
+  - deploy_tag
+  - deploy_old
+  
+
+build_snapshot:
+  stage: build_snapshot
+  tags:
+    - linux
+  before_script:
+    - export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+    - export PATH=$JAVA_HOME/bin:$PATH
+  script:
+    - chmod +x ./acme-document/git-script/build.sh
+    - cd acme-document/git-script
+    - ./build.sh $PROFILE
+  artifacts:
+    paths:
+      - acme-document/wars/$PROFILE/*.war
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "Development"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+    - when: never
+
+deploy_snapshot:
+  stage: deploy_snapshot
+  tags:
+    - linux
+  dependencies:
+    - build_snapshot
+  script:
+    - chmod +x ./acme-document/git-script/deploy-all-wars.sh
+    - cd acme-document/git-script
+    - |
+      if [ -n "$DEPLOY_TARGET" ] && [ "$DEPLOY_TARGET" != "none" ]; then
+        IFS=',' read -ra SERVERS <<< "$DEPLOY_TARGET"
+        for SERVER in "${SERVERS[@]}"; do
+          echo "Deploying to $SERVER"
+          ./deploy-all-wars.sh "$PROFILE" "$SERVER" "$TOMCAT_USER" "$TOMCAT_PASSWORD"
+        done
+      else
+        echo "No deployment scheduled for this run."
+      fi
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $CI_COMMIT_BRANCH == "Development"'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+    - when: never
+
+release_main:
+  stage: build_release
+  tags:
+    - linux
+  before_script:
+    - export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+    - export PATH=$JAVA_HOME/bin:$PATH
+    - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H localhost >> ~/.ssh/known_hosts
+    - git config --global user.email "gitlab_admin_0a80b2@example.com"
+    - git config --global user.name "root"
+
+  script:
+    - echo "🔄 Switching to main branch"
+    - git fetch origin main
+    - git checkout -B main origin/main
+
+    - echo "🔧 Configuring Git"
+    - git config --global user.name "root"
+    - git config --global user.email "gitlab_admin_0a80b2@example.com"
+    - git config --global pull.rebase false
+    - echo "http://root:$GIT_AUTH_TOKEN@localhost" > ~/.git-credentials
+    - git config --global credential.helper store
+    - git remote set-url origin http://root:$GIT_AUTH_TOKEN@localhost/root/padm.git
+
+    - echo "📦 Reading current version from parent POM"
+    - export CURRENT_VERSION=$($MAVEN_HOME/mvn -f acme-parent/pom.xml -Dexec.executable='echo' -Dexec.args='${project.version}' --non-recursive exec:exec -q)
+    - export RELEASE_VERSION=$(echo $CURRENT_VERSION | sed 's/-SNAPSHOT//')
+    - echo "Detected SNAPSHOT → $CURRENT_VERSION → Final release → v$RELEASE_VERSION"
+
+    - echo "🧹 Deleting invalid SNAPSHOT tag if exists"
+    - |
+      if git rev-parse "v$RELEASE_VERSION-SNAPSHOT" >/dev/null 2>&1; then
+        git tag -d "v$RELEASE_VERSION-SNAPSHOT"
+        git push origin :refs/tags/v$RELEASE_VERSION-SNAPSHOT
+      fi
+
+    - echo "🔍 Checking if remote tag v$RELEASE_VERSION exists"
+    - |
+      if git ls-remote --tags origin | grep -q "refs/tags/v$RELEASE_VERSION$"; then
+        echo "❌ Remote tag v$RELEASE_VERSION already exists. Skipping release."
+        exit 0
+      fi
+
+    - echo "🛑 Checking for duplicate '[maven-release-plugin] prepare for next development iteration' commit"
+    - |
+      if git log -1 --pretty=%B | grep -q "\[maven-release-plugin\] prepare for next development iteration"; then
+        echo "❌ Detected previous prepare commit. Skipping release to prevent duplicate iteration."
+        exit 0
+      fi
+
+    - git tag -d "v$RELEASE_VERSION" 2>/dev/null || echo "✅ No local tag to delete"
+
+    - echo "🚀 Starting Maven release:clean"
+    - $MAVEN_HOME/mvn -B -q -f acme-parent/pom.xml release:clean 
+
+    - echo "🚀 Running Maven release:prepare"
+    - $MAVEN_HOME/mvn -B -q -f acme-parent/pom.xml release:prepare -P default -Darguments="-DskipTests" -s acme-document/profiles/settings.xml 
+    - echo "✅ Manually pushing release commit and tag"
+    - git push origin main
+    - git push origin --tags
+
+    - echo "🌿 Creating environment branches from v$RELEASE_VERSION"
+    - |
+      for ENV in main QA Development; do
+      BRANCH_NAME="v$RELEASE_VERSION-$ENV" # Adjust this if your branch naming convention is different (e.g., just "$RELEASE_VERSION-$ENV")
+
+       echo "Attempting to create branch: $BRANCH_NAME"
+
+       # Check if the branch exists locally within the runner's workspace
+       if git rev-parse --verify $BRANCH_NAME >/dev/null 2>&1; then
+        echo "WARNING: Local branch '$BRANCH_NAME' already exists in the runner's workspace. Deleting it..."
+        # Ensure you're not on the branch you're trying to delete (switch to main/master first)
+        git checkout main || git checkout master || git checkout develop # Fallback to common main branches
+        git branch -D $BRANCH_NAME # Force delete it
+        echo "Deleted local branch '$BRANCH_NAME'."
+      fi
+
+       # Now create the branch from the tag (assuming your intent is to create from the corresponding tag)
+       # The `git branch` command creates a local branch.
+       git branch $BRANCH_NAME "v$RELEASE_VERSION" # Create branch from the tag v0.0.47
+
+       # Then push the newly created branch to the remote
+       echo "Pushing branch '$BRANCH_NAME' to origin..."
+      git push origin $BRANCH_NAME
+
+      done
+    
+    - echo "🌿 Force updating QA and Development branches from main"
+    - |
+      for BRANCH in QA Development; do
+        git checkout -B $BRANCH origin/main
+        git push origin $BRANCH --force
+      done
+  rules:
+    - if: '($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "Main") && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event")'
+      when: always
+
+
+build_from_version_branch:
+  stage: build_tag
+  tags:
+    - linux
+  before_script:
+    - export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+    - export PATH=$JAVA_HOME/bin:$PATH
+    - git config --global user.name "root"
+    - git config --global user.email "gitlab_admin_0a80b2@example.com"
+    - git config --global credential.helper store
+    - echo "http://root:${GIT_AUTH_TOKEN}@localhost" > ~/.git-credentials
+    - git remote set-url origin http://root:${GIT_AUTH_TOKEN}@localhost/root/padm.git
+
+  script:
+    - echo "📌 Building from version branch- $VERSION_BRANCH"
+    - git fetch --all
+    - git checkout -B $VERSION_BRANCH origin/$VERSION_BRANCH
+
+    - echo "🏷️ Extracting base version from branch name"
+    - BASE=$(echo "$VERSION_BRANCH" | sed -E 's/-main$//')
+    - echo "Base version- $BASE"
+
+    - echo "📦 Building WAR"
+    - chmod +x ./acme-document/git-script/build.sh
+    - cd acme-document/git-script
+    - ./build.sh $PROFILE
+    - cd ../../
+
+    - echo "🔍 Finding latest tag for base $BASE"
+    - LAST=$(git tag -l "${BASE}.*" | sed -E "s/^${BASE}\.//" | sort -n | tail -1 || echo 0)
+    - NEXT=$((LAST + 1))
+    - NEW_TAG="${BASE}.${NEXT}"
+    - echo "🎯 Creating new tag- $NEW_TAG"
+    - git tag "$NEW_TAG"
+    - git push origin "$NEW_TAG"
+
+    - echo "$NEW_TAG" > new_tag.txt
+
+    # ✅ Save metadata for deploy step
+    - echo "TAG_VERSION=$NEW_TAG" >> build.env
+    - echo "PIPELINE_ID=$CI_PIPELINE_ID" >> build.env
+    - echo "JOB_ID=$CI_JOB_ID" >> build.env
+
+    - echo "📂 Creating artifact directory"
+    - mkdir -p artifacts/$NEW_TAG
+    - cp ${ARTIFACT_DIR}/${PROFILE}/*.war artifacts/$NEW_TAG/
+    - echo "📋 Verifying copied artifacts:"
+    - ls -la artifacts/$NEW_TAG/
+
+  artifacts:
+    paths:
+      - artifacts/
+      - new_tag.txt
+      - build.env
+    reports:
+      dotenv: build.env
+    expire_in: 30 days
+
+  rules:
+    - if: '$WORKFLOW_TYPE == "build_and_deploy"'
+      when: always
+    - when: never
+
+deploy_created_tag:
+  stage: deploy_tag
+  tags:
+    - linux
+  needs:
+    - job: build_from_version_branch
+      artifacts: true
+  variables:
+    ARTIFACT_DIR: "acme-document/wars"
+    PROFILE: "default"
+
+  script:
+    - echo "📥 Reading build.env"
+    - |
+      if [ ! -f "build.env" ]; then
+        echo "❌ build.env not found!"
+        exit 1
+      fi
+      source build.env
+      echo "✅ TAG_VERSION=$TAG_VERSION"
+      echo "✅ PIPELINE_ID=$PIPELINE_ID"
+      echo "✅ JOB_ID=$JOB_ID"
+
+    - echo "📦 Downloading artifacts from original build job"
+    - mkdir -p temp_artifacts
+    - |
+      ARTIFACT_URL="$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$JOB_ID/artifacts"
+      echo "📥 $ARTIFACT_URL"
+      curl --fail --header "PRIVATE-TOKEN: $GIT_AUTH_TOKEN" \
+           --output temp_artifacts/artifacts.zip \
+           "$ARTIFACT_URL"
+
+    - echo "📦 Extracting artifacts"
+    - unzip -o temp_artifacts/artifacts.zip -d temp_artifacts
+
+    - echo "🔢 Generating version suffix from TAG_VERSION=$TAG_VERSION"
+    - |
+      BASE_VERSION=$(echo "$TAG_VERSION" | cut -d'.' -f1-3 | sed 's/^v//')
+      MAJOR=$(echo "$BASE_VERSION" | cut -d'.' -f3)
+      VERSION_SUFFIX=$(printf "##%04d" "$MAJOR")
+      echo "ℹ️ VERSION_SUFFIX=$VERSION_SUFFIX"
+
+    - echo "📦 Copying WAR files with version suffix"
+    - |
+      mkdir -p ${ARTIFACT_DIR}/${PROFILE}/
+      WAR_SRC=$(find temp_artifacts -type f -name "*.war" | head -n1 | xargs dirname)
+
+      if [ -d "$WAR_SRC" ]; then
+        if [ "$DEPLOY_ALL" = "true" ] || [ -z "$SELECTED_WARS" ]; then
+          echo "📂 Deploying ALL WARs"
+          for WAR_FILE in "$WAR_SRC"/*.war; do
+            BASE_NAME=$(basename "$WAR_FILE" .war)
+            RENAMED="${BASE_NAME}${VERSION_SUFFIX}.war"
+            cp "$WAR_FILE" "${ARTIFACT_DIR}/${PROFILE}/${RENAMED}"
+            echo "✅ Copied $WAR_FILE → $RENAMED"
+          done
+        else
+          echo "📂 Deploying selected WARs: $SELECTED_WARS"
+          IFS=',' read -ra WAR_SHORT_NAMES <<< "$SELECTED_WARS"
+          for SHORT_NAME in "${WAR_SHORT_NAMES[@]}"; do
+            WAR_FILE="acme-${SHORT_NAME}-web.war"
+            WAR_PATH="$WAR_SRC/$WAR_FILE"
+            if [ -f "$WAR_PATH" ]; then
+              RENAMED="acme-${SHORT_NAME}-web${VERSION_SUFFIX}.war"
+              cp "$WAR_PATH" "${ARTIFACT_DIR}/${PROFILE}/${RENAMED}"
+              echo "✅ Copied $WAR_FILE → $RENAMED"
+            else
+              echo "⚠️ Warning: $WAR_FILE not found in $WAR_SRC"
+            fi
+          done
+        fi
+      else
+        echo "❌ ERROR: WAR source folder not found"
+        exit 1
+      fi
+
+    - echo "🔑 Preparing deployment scripts"
+    - chmod +x ./acme-document/git-script/deploy-customer.sh
+    - chmod +x ./acme-document/git-script/deploy-all-wars.sh
+
+    - echo "🚀 Deploying to customers $CUSTOMER_LIST"
+    - cd acme-document/git-script
+    - |
+      IFS=',' read -ra CUSTOMERS <<< "$CUSTOMER_LIST"
+      DEPLOY_SUCCESS=true
+      for CUSTOMER in "${CUSTOMERS[@]}"; do
+        echo "🔄 Deploying to $CUSTOMER"
+        if ! ./deploy-customer.sh "$CUSTOMER" "../wars/${PROFILE}" "true" "$TOMCAT_USER" "$TOMCAT_PASSWORD"; then
+          echo "❌ Deployment failed for $CUSTOMER"
+          DEPLOY_SUCCESS=false
+        else
+          echo "✅ Deployment succeeded for $CUSTOMER"
+        fi
+      done
+      if [ "$DEPLOY_SUCCESS" = false ]; then
+        echo "❌ One or more deployments failed"
+        exit 1
+      fi
+
+    - echo "✅ All deployments completed successfully"
+
+  after_script:
+    - echo "🧹 Cleaning up"
+    - rm -rf temp_artifacts
+
+  rules:
+    - if: '$WORKFLOW_TYPE == "build_and_deploy"'
+      when: always
+    - when: never
+
+
+deploy_from_old_build_tag:
+  stage: deploy_old
+  tags:
+    - linux
+  variables:
+    ARTIFACT_DIR: "acme-document/wars"
+    TEMP_DIR: "temp_artifacts"
+  before_script:
+    - echo "📋 Validating required variables"
+    - |
+      if [ -z "$TAG_VERSION" ]; then
+        echo "❌ ERROR: TAG_VERSION is not set!"
+        exit 1
+      fi
+      if [ -z "$CUSTOMER_LIST" ]; then
+        echo "❌ ERROR: CUSTOMER_LIST is not set!"
+        exit 1
+      fi
+      mkdir -p $TEMP_DIR
+      echo "🔧 Installing jq"
+      if ! command -v jq >/dev/null 2>&1; then
+        apt-get update && apt-get install -y jq
+      fi
+
+  script:
+    - echo "📥 Getting pipeline and job ID for tag $TAG_VERSION"
+    - |
+      BASE=$(echo "$TAG_VERSION" | sed -E 's/\.[0-9]+$//')
+      VERSION_BRANCH="${BASE}-main"
+
+      PIPELINE_ID=$(curl --silent --header "PRIVATE-TOKEN: $GIT_AUTH_TOKEN" \
+        "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines?ref=$VERSION_BRANCH&order_by=id&sort=desc" \
+        | jq '.[0].id')
+
+      if [ -z "$PIPELINE_ID" ] || [ "$PIPELINE_ID" == "null" ]; then
+        echo "❌ No pipeline found for version branch $VERSION_BRANCH"
+        exit 1
+      fi
+
+    - echo "📥 Finding job ID from pipeline"
+    - |
+      JOB_ID=$(curl --silent --header "PRIVATE-TOKEN: $GIT_AUTH_TOKEN" \
+        "$CI_API_V4_URL/projects/$CI_PROJECT_ID/pipelines/$PIPELINE_ID/jobs" \
+        | jq -r '.[] | select(.name == "build_from_version_branch") | .id')
+
+      if [ -z "$JOB_ID" ] || [ "$JOB_ID" == "null" ]; then
+        echo "❌ No job found for 'build_from_version_branch'"
+        exit 1
+      fi
+
+    - echo "📥 Downloading build.env"
+    - |
+      curl --fail --header "PRIVATE-TOKEN: $GIT_AUTH_TOKEN" \
+           "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$JOB_ID/artifacts/build.env" \
+           --output "$TEMP_DIR/build.env"
+
+      source "$TEMP_DIR/build.env"
+
+    - echo "📥 Downloading artifacts"
+    - |
+      curl --fail --header "PRIVATE-TOKEN: $GIT_AUTH_TOKEN" \
+           "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/$JOB_ID/artifacts" \
+           --output "$TEMP_DIR/artifacts.zip"
+
+      unzip -o "$TEMP_DIR/artifacts.zip" -d "$TEMP_DIR"
+
+    - echo "🔢 Preparing version suffix"
+    - |
+      BASE_VERSION=$(echo "$TAG_VERSION" | cut -d'.' -f1-3 | sed 's/^v//')
+      MAJOR=$(echo "$BASE_VERSION" | cut -d'.' -f3)
+      VERSION_SUFFIX=$(printf "##%04d" "$MAJOR")
+
+    - echo "📦 Renaming and copying WARs"
+    - |
+      mkdir -p ${ARTIFACT_DIR}/${PROFILE}/
+      WAR_SRC=$(find $TEMP_DIR -type f -name "*.war" | head -n1 | xargs dirname)
+
+      if [ "$DEPLOY_ALL" = "true" ] || [ -z "$SELECTED_WARS" ]; then
+        for WAR_FILE in "$WAR_SRC"/*.war; do
+          BASE_NAME=$(basename "$WAR_FILE" .war)
+          RENAMED="${BASE_NAME}${VERSION_SUFFIX}.war"
+          cp "$WAR_FILE" "${ARTIFACT_DIR}/${PROFILE}/${RENAMED}"
+        done
+      else
+        IFS=',' read -ra WAR_SHORT_NAMES <<< "$SELECTED_WARS"
+        for SHORT_NAME in "${WAR_SHORT_NAMES[@]}"; do
+          WAR_FILE="acme-${SHORT_NAME}-web.war"
+          WAR_PATH="$WAR_SRC/$WAR_FILE"
+          if [ -f "$WAR_PATH" ]; then
+            RENAMED="acme-${SHORT_NAME}-web${VERSION_SUFFIX}.war"
+            cp "$WAR_PATH" "${ARTIFACT_DIR}/${PROFILE}/${RENAMED}"
+          fi
+        done
+      fi
+
+    - echo "🚀 Deploying to customers $CUSTOMER_LIST"
+    - cd acme-document/git-script
+    - |
+      chmod +x deploy-customer.sh deploy-all-wars.sh
+
+      IFS=',' read -ra CUSTOMERS <<< "$CUSTOMER_LIST"
+      DEPLOY_SUCCESS=true
+      for CUSTOMER in "${CUSTOMERS[@]}"; do
+        echo "🔄 Deploying to $CUSTOMER"
+        if ! ./deploy-customer.sh "$CUSTOMER" "../wars/${PROFILE}" "true" "$TOMCAT_USER" "$TOMCAT_PASSWORD"; then
+          echo "❌ Deployment failed for $CUSTOMER"
+          DEPLOY_SUCCESS=false
+        fi
+      done
+
+      if [ "$DEPLOY_SUCCESS" = false ]; then
+        echo "❌ One or more deployments failed"
+        exit 1
+      fi
+
+  after_script:
+    - rm -rf $TEMP_DIR
+
+  rules:
+    - if: '$WORKFLOW_TYPE == "deploy_only"'
+      when: always
+    - when: never

@@ -11,9 +11,9 @@ This document provides step-by-step instructions with images for registering a u
 ## ✅ 1. User Registration Process
 
 ### Step 1: Visit the Registration Page
-Navigate to the official registration page of the platform.
+Navigate to the Acme Gitlab registration page of the platform.
 
-🔗 <a href="http://172.16.2.231/users/sign_up" target="_blank" rel="noopener noreferrer">GitHub Registration Page</a>
+🔗 <a href="http://172.16.2.231/users/sign_up" target="_blank" rel="noopener noreferrer">Gitlab Registration Page</a>
 
 ![Registration Page](https://i.postimg.cc/65nyntgp/git-registration.png)
 
