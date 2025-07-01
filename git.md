@@ -45,24 +45,28 @@ git config --global user.email "you@example.com"
 
 ---
 
-## 🔐 4. Set Up SSH for GitHub/GitLab
 
-🔗<a href="ssh-gitlab-setup.md" target="_blank">SSH Key Generation for GitLab</a> 
-
----
-
-## 📂 5. Basic Git Commands
+## 📂 4. Basic Git Commands
 
 Clone a repo:
 
 ```bash
-git clone git@172.16.2.231:root/padm.git
+git clone http://172.16.2.231/root/padm.git
 ```
+When prompted:
+- **Username**: Your GitLab username
+- **Password**: Your **password**
+
 
 ![Git Clone](https://i.postimg.cc/59FhXq6D/gitclone.png)
 
 
 🔗<a href="import-cloned-maven-project.md" target="_blank">Import Cloned Maven Project in Eclipse</a> 
+
+
+![Git Clone](https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExYWV0ZTdxeDJ3aGZ1Z3lsMjRxY284Zjc2YTFlNGwwbnNtZXRqbjF3ayZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/cnhpl4IeYgU7MCBdV2/giphy.gif)
+
+
 
 🔗<a href="git-workflow-eclipse.md" target="_blank">🧭 Git Workflow in Eclipse (GUI-Based)</a> 
 
@@ -71,7 +75,9 @@ git clone git@172.16.2.231:root/padm.git
 
 ---
 
-## 🌿 6. Branching
+## 🌿 5. Branching
+
+🔗<a href="branches.md" target="_blank"> 🌱 Developer Git Workflow in Eclipse (Development Branch Access Only)</a> 
 
 ```bash
 git checkout -b new-feature
@@ -79,25 +85,12 @@ git checkout main
 git merge new-feature
 ```
 
-![Git Branch](https://wac-cdn.atlassian.com/dam/jcr:813202ee-f9de-41bc-bf0f-169b6adfb8fd/01.svg)
 
 ---
 
-## 🧩 7. Git in Eclipse
 
-Use EGit Plugin:
-- Go to `Help` → `Eclipse Marketplace`
-- Search: EGit
 
-Clone using:
-- `File` → `Import` → `Git` → `Projects from Git`
-- Use SSH URL
-
-![Eclipse Git](https://www.vogella.com/tutorials/EclipseGit/img/egit-import-0.png)
-
----
-
-## 🔚 8. Git Cheat Sheet
+## 🔚 6. Git Cheat Sheet
 
 | Command        | Description         |
 |----------------|---------------------|

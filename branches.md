@@ -1,143 +1,145 @@
-
 # 🌱 Developer Git Workflow in Eclipse (Development Branch Access Only)
 
-**Author**: <a href="https://www.linkedin.com/in/ajayaniljadhav" target="_blank" rel="noopener noreferrer">Ajay Jadhav</a>
+**Author**: <a href="https://www.linkedin.com/in/ajayaniljadhav" target="_blank" rel="noopener noreferrer">Ajay Jadhav</a>  
+**Updated**: June 30, 2025
 
-This guide explains the Git workflow **for developers** who only have access to the `Development` branch in a Git-managed project. This includes:
+This guide explains the Git workflow **for developers** who only have access to the `development` branch in a Git-managed project. This includes:
 
-- Pulling code from `Development`
-- Creating a new feature branch from `Development`
+- Checking out the remote `development` branch (if only available under Remote Tracking)
+- Creating a new feature branch from `development`
 - Pushing changes
-- Creating a merge request (MR) **back to `Development`**
+- Creating a merge request (MR) **back to `development`**
 
 ---
 
 ## 🧩 Workflow Overview
 
 ```plaintext
-Development (remote branch)
+origin/development (remote tracking)
    ↓
-Developer checks out Development
+Checkout as local branch: development
    ↓
-Creates feature branch: ajay-login-fix
+Create feature branch: ajay-login-fix
    ↓
-Makes changes, commits, and pushes
+Make changes, commit, push
    ↓
-Creates Merge Request → target: Development
+Create Merge Request → target: development
 ```
 
 ---
 
-## 🪴 Step 1: Checkout `Development` Branch
+## 🪴 Step 1: Checkout `origin/development` (Remote Tracking Branch)
 
-1. Open **Git Repositories** view in Eclipse
-2. Expand **Remotes ➡ origin ➡ development**
-3. Right-click ➡ **Checkout As...**
-4. Choose:  
-   - Create new local branch: `development`  
-   - Start tracking remote: `origin/development`  
+1. Open **Git Repositories** view in Eclipse 
+
+![gitreporsitory.png](https://i.postimg.cc/DyvwMDbK/gitreporsitory.png)
+
+2. Expand:  
+   ```
+   Branches → Remote Tracking → origin → development
+   ```
+![developmentbranch.png](https://i.postimg.cc/VLxH6y9x/developmentbranch.png)
+
+3. Right-click `origin/development`  
+
+![rightclickcheckout.png](https://i.postimg.cc/sxR4zyCm/rightclickcheckout.png)
+
+4. Choose **Checkout As...**
+
+![track1.png](https://i.postimg.cc/2yKjvjjF/track1.png)
+
+5. In the dialog:
+   - ✅ Create new local branch: `development`
+   - ✅ Track remote branch: `origin/development`
    - Click **Finish**
 
-📸 _Image Placeholder:_  
-`images/eclipse-checkout-development.png`
+
+
+![track1.png](https://i.postimg.cc/2ym9wnyC/createbranch.png)
+
 
 ---
 
-## 🌿 Step 2: Create Feature Branch (from Development)
+## 🌿 Step 2: Create Feature Branch (from Local `development`)
 
-1. In **Git Repositories**, right-click on `development` (local)
+1. In **Git Repositories**, right-click local 
 2. Choose **Switch To ➡ New Branch**
-3. Enter branch name, e.g., `ajay-login-fix`
-4. Click **Checkout new branch**
 
-📸 _Image Placeholder:_  
-`images/eclipse-create-feature-branch.png`
+![switchtonew.png](https://i.postimg.cc/W3BZybFw/switchtonew.png)
+
+3. Enter a feature branch name, e.g., `ajay-jadhav`
+4. ✅ Check **Checkout new branch**
+5. Click **Finish**
+
+ 
+![create-Branch](https://i.postimg.cc/nc0zjhFS/create-Branch.png)
 
 ---
 
 ## 🛠️ Step 3: Make Changes and Commit
 
-1. Do your code modifications
+1. Perform your code changes
 2. Open **Git Staging View**
-3. Stage files by dragging to **Staged Changes**
+3. Drag files to **Staged Changes**
 4. Add a commit message
 5. Click **Commit**
 
-📸 _Image Placeholder:_  
-`images/eclipse-git-commit.png`
+![firstcommit.png](https://i.postimg.cc/yYJnQq08/firstcommit.png)
 
 ---
 
 ## 🚀 Step 4: Push Your Feature Branch
 
 1. Right-click the project ➡ **Team ➡ Push Branch**
-2. Ensure the remote branch is named the same (e.g., `ajay-login-fix`)
+
+![pushbransh.png](https://i.postimg.cc/rzXkd1S6/pushbransh.png)
+
+2. Ensure the remote branch name matches your local branch (e.g., `ajay-jadhav`)
 3. Click **Next ➡ Finish**
 
-📸 _Image Placeholder:_  
-`images/eclipse-push-feature-branch.png`
+![branchpush.png](https://i.postimg.cc/wxhHPPHg/branchpush.png)
 
 ---
 
-## 🔁 Step 5: Create Merge Request to Development Branch
+## 🔁 Step 5: Create Merge Request to `development`
 
-> Merge requests must be made from feature branch ➡ `Development`
+> MRs must be made from your feature branch → target: `development`
 
-1. Go to GitLab/GitHub web interface
-2. You'll see: "Push successful. Create merge request?"
-3. Or, manually create it:
-   - Source branch: `ajay-login-fix`
-   - Target branch: `Development`
-4. Add title, description, and reviewers
+1. Open GitLab/GitHub web interface
+2. It may show “Push successful. Create merge request?”
+
+![mergerequestoption.png](https://i.postimg.cc/Yqvc7sBv/mergerequestoption.png)
+
+3. Or create manually:
+   - Source branch: `ajay-jadhav`
+   - Target branch: `development`
+
+![sourcetaget.png](https://i.postimg.cc/hGP6Cys4/sourcetaget.png)
+
+4. Fill in title, description, reviewers
+
+![description.png](https://i.postimg.cc/X75bFzHT/description.png)
+
 5. Click **Create Merge Request**
 
-📸 _Image Placeholder:_  
-`images/web-create-merge-request.png`
+![createmergerequestclick.png](https://i.postimg.cc/ydTTws8w/createmergerequestclick.png)
 
----
 
-## 🔐 GitLab CI/CD `release_main` Job (Admin Only)
+![Git merge](https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExazVmeGdkbmdiM3htM3praXcyaG8wdHR6a3NuczJvbzlzNmR0ODVlMCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/D0WOL0ogZIoG4/giphy.gif)
 
-> This job is restricted to maintainers/admins. It:
-- Switches to main branch
-- Prepares release
-- Creates tags
-- Creates environment branches (Main, QA, Development)
-- Force updates QA/Development from main
 
-```yaml
-# Triggered only on main branch push or MR
-rules:
-  - if: '($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "Main") && ($CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event")'
-```
-
-🔐 Developers cannot run this pipeline. Only Maintainers trigger it from `main`.
-
----
 
 ## 🧭 Summary Table
 
 | Task                         | Eclipse Action / Note                                |
 |------------------------------|------------------------------------------------------|
-| Checkout Development         | Git Repos ➡ Remotes ➡ origin/development ➡ Checkout |
+| Checkout `origin/development` | Remote Tracking → Checkout As Local                 |
 | Create Feature Branch        | Right-click `development` ➡ Switch To ➡ New Branch  |
 | Commit Changes               | Git Staging ➡ Stage ➡ Commit                         |
 | Push Branch                  | Team ➡ Push Branch                                   |
-| Create Merge Request         | GitLab/GitHub Web ➡ Source ➡ Target = Development    |
+| Create Merge Request         | GitLab Web ➡ Source ➡ Target = development           |
 
 ---
 
-## 📂 Suggested Images
 
-```
-images/
-├── eclipse-checkout-development.png
-├── eclipse-create-feature-branch.png
-├── eclipse-git-commit.png
-├── eclipse-push-feature-branch.png
-└── web-create-merge-request.png
-```
-
----
-
-💡 _This setup ensures developers work safely in `Development` without modifying protected `main` branch._
+💡 _This setup ensures developers contribute safely in the `development` branch without modifying protected branches like `main`._
